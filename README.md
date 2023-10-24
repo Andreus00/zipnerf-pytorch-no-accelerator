@@ -1,5 +1,5 @@
 # ZipNeRF
-
+# STILL WORKNG ON IT
 An unofficial pytorch implementation of 
 "Zip-NeRF: Anti-Aliased Grid-Based Neural Radiance Fields" 
 [https://arxiv.org/abs/2304.06706](https://arxiv.org/abs/2304.06706).
