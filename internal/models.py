@@ -641,7 +641,6 @@ class PropMLP(MLP):
 
 @torch.no_grad()
 def render_image(model,
-                 accelerator: accelerate.Accelerator,
                  batch,
                  rand,
                  train_frac,
@@ -668,47 +667,48 @@ def render_image(model,
     num_rays = height * width
     batch = {k: v.reshape((num_rays, -1)) for k, v in batch.items() if v is not None}
 
-    global_rank = accelerator.process_index
     chunks = []
     idx0s = tqdm(range(0, num_rays, config.render_chunk_size),
-                 desc="Rendering chunk", leave=False,
-                 disable=not (accelerator.is_main_process and verbose))
+                 desc="Rendering chunk", leave=False)
+                #  disable=not (accelerator.is_main_process and verbose))   # TODO: this should not break the code. Check later.
 
     for i_chunk, idx0 in enumerate(idx0s):
         chunk_batch = tree_map(lambda r: r[idx0:idx0 + config.render_chunk_size], batch)
         actual_chunk_size = chunk_batch['origins'].shape[0]
-        rays_remaining = actual_chunk_size % accelerator.num_processes
-        if rays_remaining != 0:
-            padding = accelerator.num_processes - rays_remaining
-            chunk_batch = tree_map(lambda v: torch.cat([v, torch.zeros_like(v[-padding:])], dim=0), chunk_batch)
-        else:
-            padding = 0
+        # rays_remaining = actual_chunk_size % accelerator.num_processes
+        # if rays_remaining != 0:
+        #     padding = accelerator.num_processes - rays_remaining
+        #     chunk_batch = tree_map(lambda v: torch.cat([v, torch.zeros_like(v[-padding:])], dim=0), chunk_batch)
+        # else:
+        #     padding = 0
+        padding = 0
         # After padding the number of chunk_rays is always divisible by host_count.
-        rays_per_host = chunk_batch['origins'].shape[0] // accelerator.num_processes
-        start, stop = global_rank * rays_per_host, (global_rank + 1) * rays_per_host
+        rays_per_host = chunk_batch['origins'].shape[0] # // accelerator.num_processes  # TODO: this should not break the code. Check later.
+        start, stop =   i_chunk * rays_per_host, (i_chunk + 1) * rays_per_host  # global_rank * rays_per_host, (global_rank + 1) * rays_per_host    # TODO: Check if this is the correct way to chunk the rays.
         chunk_batch = tree_map(lambda r: r[start:stop], chunk_batch)
 
-        with accelerator.autocast():
-            chunk_renderings, ray_history = model(rand,
-                                                  chunk_batch,
-                                                  train_frac=train_frac,
-                                                  compute_extras=True,
-                                                  zero_glo=True)
+        # with accelerator.autocast():      # TODO: this may give problems if inside the model there are functions that do not cast tensors when needed.
+        chunk_renderings, ray_history = model(rand,
+                                                chunk_batch,
+                                                train_frac=train_frac,
+                                                compute_extras=True,
+                                                zero_glo=True)
 
-        gather = lambda v: accelerator.gather(v.contiguous())[:-padding] \
-            if padding > 0 else accelerator.gather(v.contiguous())
-        # Unshard the renderings.
-        chunk_renderings = tree_map(gather, chunk_renderings)
+        # gather = lambda v: accelerator.gather(v.contiguous())[:-padding] \
+        #     if padding > 0 else accelerator.gather(v.contiguous())
+        # # Unshard the renderings.
+        # chunk_renderings = tree_map(gather, chunk_renderings)     # TODO: chunks should not be chunked now.
 
         # Gather the final pass for 2D buffers and all passes for ray bundles.
-        chunk_rendering = chunk_renderings[-1]
+        chunk_rendering = chunk_renderings[-1]  # TODO: this may break the code as I commented the part before not really knowing what it does. :)
         for k in chunk_renderings[0]:
             if k.startswith('ray_'):
                 chunk_rendering[k] = [r[k] for r in chunk_renderings]
 
-        if return_weights:
-            chunk_rendering['weights'] = gather(ray_history[-1]['weights'])
-            chunk_rendering['coord'] = gather(ray_history[-1]['coord'])
+        if return_weights:  # TODO: Better if you don't.
+            raise NotImplementedError
+            # chunk_rendering['weights'] = gather(ray_history[-1]['weights'])
+            # chunk_rendering['coord'] = gather(ray_history[-1]['coord'])
         chunks.append(chunk_rendering)
 
     # Concatenate all chunks within each leaf of a single pytree.
@@ -736,5 +736,5 @@ def render_image(model,
         ray_idx = ray_idx[:config.vis_num_rays]
         for k in keys:
             rendering[k] = [r[ray_idx] for r in rendering[k]]
-    model.train()
+    model.train()   # TODO: check if it is needed.
     return rendering

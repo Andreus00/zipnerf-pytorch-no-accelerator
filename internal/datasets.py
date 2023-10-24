@@ -679,6 +679,7 @@ class LLFF(Dataset):
         self.height, self.width = images.shape[1:3]
 
 
+
 class TanksAndTemplesNerfPP(Dataset):
     """Subset of Tanks and Temples Dataset as processed by NeRF++."""
 

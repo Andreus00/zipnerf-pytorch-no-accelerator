@@ -229,13 +229,13 @@ def predicted_normal_loss(model, ray_history, config):
     return total_loss
 
 
-def clip_gradients(model, accelerator, config):
+def clip_gradients(model, config):
     """Clips gradients of MLP based on norm and max value."""
-    if config.grad_max_norm > 0 and accelerator.sync_gradients:
-        accelerator.clip_grad_norm_(model.parameters(), config.grad_max_norm)
+    if config.grad_max_norm > 0: # and accelerator.sync_gradients:   # TODO: this should not break the code. Check
+        torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_max_norm)
 
-    if config.grad_max_val > 0 and accelerator.sync_gradients:
-        accelerator.clip_grad_value_(model.parameters(), config.grad_max_val)
+    if config.grad_max_val > 0: # and accelerator.sync_gradients:   # TODO: this should not break the code. Check
+        torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_max_val)
 
     for param in model.parameters():
         param.grad.nan_to_num_()
