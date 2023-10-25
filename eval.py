@@ -59,8 +59,6 @@ def main(unused_argv):
     config.checkpoint_dir = os.path.join(config.exp_path, 'checkpoints')
     config.render_dir = os.path.join(config.exp_path, 'render')
 
-    accelerator = accelerate.Accelerator()
-
     # setup logger
     logging.basicConfig(
         format="%(asctime)s: %(message)s",
@@ -71,16 +69,12 @@ def main(unused_argv):
         level=logging.INFO,
     )
     sys.excepthook = utils.handle_exception
-    logger = accelerate.logging.get_logger(__name__)
-    logger.info(config)
-    logger.info(accelerator.state, main_process_only=False)
 
-    config.world_size = accelerator.num_processes
-    config.global_rank = accelerator.process_index
-    accelerate.utils.set_seed(config.seed, device_specific=True)
+    config.world_size = 1
+    config.global_rank = 0
     model = models.Model(config=config)
     model.eval()
-    model.to(accelerator.device)
+    model.to(config.device)
 
     dataset = datasets.load_dataset('test', config.data_dir, config)
     dataloader = torch.utils.data.DataLoader(np.arange(len(dataset)),
@@ -99,8 +93,6 @@ def main(unused_argv):
     else:
         cc_fun = image.color_correct
 
-    model = accelerator.prepare(model)
-
     metric_harness = image.MetricHarness()
 
     last_step = 0
@@ -112,12 +104,12 @@ def main(unused_argv):
         summary_writer = tensorboardX.SummaryWriter(
             os.path.join(config.exp_path, 'eval'))
     while True:
-        step = checkpoints.restore_checkpoint(config.checkpoint_dir, accelerator, logger)
+        step, model, _ = checkpoints.restore_checkpoint(config.checkpoint_dir, model, optimizer=None)
         if step <= last_step:
-            logger.info(f'Checkpoint step {step} <= last step {last_step}, sleeping.')
+            print(f'Checkpoint step {step} <= last step {last_step}, sleeping.') # TODO: use a logger
             time.sleep(10)
             continue
-        logger.info(f'Evaluating checkpoint at step {step}.')
+        print(f'Evaluating checkpoint at step {step}.') # TODO: use a logger
         if config.eval_save_output and (not utils.isdir(out_dir)):
             utils.makedirs(out_dir)
 
@@ -129,20 +121,17 @@ def main(unused_argv):
         showcases = []
         render_times = []
         for idx, batch in enumerate(dataloader):
-            batch = accelerate.utils.send_to_device(batch, accelerator.device)
+            batch = tree_map(lambda x: x.to(config.device) if x is not None else None, batch)
             eval_start_time = time.time()
             if idx >= num_eval:
-                logger.info(f'Skipping image {idx + 1}/{dataset.size}')
+                print(f'Skipping image {idx + 1}/{dataset.size}') # TODO: use a logger
                 continue
-            logger.info(f'Evaluating image {idx + 1}/{dataset.size}')
-            rendering = models.render_image(model, accelerator,
-                                            batch, False, 1, config)
-
-            if not accelerator.is_main_process:  # Only record via host 0.
-                continue
+            print(f'Evaluating image {idx + 1}/{dataset.size}') # TODO: use a logger
+            rendering = models.render_image(model, batch,
+                                            False, 1, config)
 
             render_times.append((time.time() - eval_start_time))
-            logger.info(f'Rendered in {render_times[-1]:0.3f}s')
+            print(f'Rendered in {render_times[-1]:0.3f}s') # TODO: use a logger
 
             cc_start_time = time.time()
             rendering['rgb_cc'] = cc_fun(rendering['rgb'], batch['rgb'])
@@ -151,7 +140,7 @@ def main(unused_argv):
             batch = tree_map(lambda x: x.detach().cpu().numpy() if x is not None else None, batch)
 
             gt_rgb = batch['rgb']
-            logger.info(f'Color corrected in {(time.time() - cc_start_time):0.3f}s')
+            print(f'Color corrected in {(time.time() - cc_start_time):0.3f}s') # TODO: use a logger
 
             if not config.eval_only_once and idx in showcase_indices:
                 showcase_idx = idx if config.deterministic_showcase else len(showcases)
@@ -193,7 +182,7 @@ def main(unused_argv):
                                 weights, normalized_normals, normalized_normals_gt)
 
                 for m, v in metric.items():
-                    logger.info(f'{m:30s} = {v:.4f}')
+                    print(f'{m:30s} = {v:.4f}') # TODO: use a logger
 
                 metrics.append(metric)
                 metrics_cc.append(metric_cc)
@@ -217,7 +206,7 @@ def main(unused_argv):
 
                     utils.save_img_f32(rendering['acc'], path_fn(f'acc_{idx:03d}.tiff'))
 
-        if (not config.eval_only_once) and accelerator.is_main_process:
+        if (not config.eval_only_once):
             summary_writer.add_scalar('eval_median_render_time', np.median(render_times),
                                       step)
             for name in metrics[0]:
@@ -254,11 +243,10 @@ def main(unused_argv):
                         summary_writer.add_image(f'true_normals_{i}', tb_process_fn(b['normals']) / 2. + 0.5,
                                                  step)
 
-        if (config.eval_save_output and (not config.render_path) and
-                accelerator.is_main_process):
+        if config.eval_save_output and (not config.render_path):
             with utils.open_file(path_fn(f'render_times_{step}.txt'), 'w') as f:
                 f.write(' '.join([str(r) for r in render_times]))
-            logger.info(f'metrics:')
+            print(f'metrics:') # TODO: use a logger
             results = {}
             num_buckets = config.multiscale_levels if config.multiscale else 1
             for name in metrics[0]:
@@ -270,8 +258,8 @@ def main(unused_argv):
             with utils.open_file(path_fn(f'metric_avg_{step}.txt'), 'w') as f:
                 for name in metrics[0]:
                     f.write(f'{name}: {results[name]}\n')
-                    logger.info(f'{name}: {results[name]}')
-            logger.info(f'metrics_cc:')
+                    print(f'{name}: {results[name]}') # TODO: use a logger
+            print(f'metrics_cc:') # TODO: use a logger
             results_cc = {}
             for name in metrics_cc[0]:
                 with utils.open_file(path_fn(f'metric_cc_{name}_{step}.txt'), 'w') as f:
@@ -282,7 +270,7 @@ def main(unused_argv):
             with utils.open_file(path_fn(f'metric_cc_avg_{step}.txt'), 'w') as f:
                 for name in metrics[0]:
                     f.write(f'{name}: {results_cc[name]}\n')
-                    logger.info(f'{name}: {results_cc[name]}')
+                    print(f'{name}: {results_cc[name]}') # TODO: use a logger
             if config.eval_save_ray_data:
                 for i, r, b in showcases:
                     rays = {k: v for k, v in r.items() if 'ray_' in k}
@@ -299,7 +287,7 @@ def main(unused_argv):
         if int(step) >= num_steps:
             break
         last_step = step
-    logger.info('Finish evaluation.')
+    print('Finish evaluation.') # TODO: use a logger
 
 
 if __name__ == '__main__':

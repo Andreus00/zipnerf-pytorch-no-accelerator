@@ -207,7 +207,11 @@ bash scripts/local_colmap_and_resize.sh ${DATA_DIR}
 ```
 
 ## TODO
-- [x] Add MultiScale training and testing
+- [] Fix evaluate_color_projection in extract.py
+- [] Remove global_rank from the code
+- [] Remove world_size from the code
+- [] Add a logger
+- [] Delete the optimizer after checkpoint restore when not used (eval, render, extract and tsdf)
 
 ## Citation
 ```

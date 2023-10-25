@@ -80,7 +80,7 @@ def main(unused_argv):
         postprocess_fn = lambda z, _=None: z
 
     # use accelerate to prepare.
-    model = model.cuda()
+    model = model.to(config.device)
 
     if config.resume_from_checkpoint:
         init_step, model, optimizer = checkpoints.restore_checkpoint(config.checkpoint_dir, model, optimizer)
@@ -134,7 +134,7 @@ def main(unused_argv):
                 dataiter = iter(dataloader)
                 batch = next(dataiter)
             # batch = accelerate.utils.send_to_device(batch, accelerator.device)
-            batch = tree_map(lambda x: x.cuda() if x is not None else None, batch)
+            batch = tree_map(lambda x: x.to(config.device) if x is not None else None, batch)
             if reset_stats: # and accelerator.is_main_process:  # TODO: check if this can actually be disabled.
                 stats_buffer = []
                 train_start_time = time.time()
@@ -306,7 +306,7 @@ def main(unused_argv):
                     test_dataiter = iter(test_dataloader)
                     test_batch = next(test_dataiter)
                 # test_batch = accelerate.utils.send_to_device(test_batch, accelerator.device)
-                test_batch = tree_map(lambda x: x.cuda() if x is not None else None, test_batch)
+                test_batch = tree_map(lambda x: x.to(config.device) if x is not None else None, test_batch)
                 # render a single image with all distributed processes
                 rendering = models.render_image(model,
                                                 test_batch, False,

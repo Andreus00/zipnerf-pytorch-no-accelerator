@@ -477,7 +477,7 @@ class Blender(Dataset):
         disp_images = []
         normal_images = []
         cams = []
-        for idx, frame in enumerate(tqdm(meta['frames'], desc='Loading Blender dataset', disable=self.global_rank != 0, leave=False)):
+        for idx, frame in enumerate(tqdm(meta['frames'], desc='Loading Blender dataset', leave=False)):
             fprefix = os.path.join(self.data_dir, frame['file_path'])
 
             def get_img(f, fprefix=fprefix):
@@ -651,7 +651,7 @@ class LLFF(Dataset):
             colmap_to_image = dict(zip(colmap_files, image_files))
             image_paths = [os.path.join(image_dir, colmap_to_image[f])
                            for f in image_names]
-            images = [utils.load_img(x) for x in tqdm(image_paths, desc='Loading LLFF dataset', disable=self.global_rank != 0, leave=False)]
+            images = [utils.load_img(x) for x in tqdm(image_paths, desc='Loading LLFF dataset', leave=False)]
             images = np.stack(images, axis=0) / 255.
 
             # EXIF data is usually only present in the original JPEG images.

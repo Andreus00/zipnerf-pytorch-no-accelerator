@@ -706,10 +706,9 @@ def render_image(model,
             if k.startswith('ray_'):
                 chunk_rendering[k] = [r[k] for r in chunk_renderings]
 
-        if return_weights:  # TODO: Better if you don't.
-            raise NotImplementedError
-            # chunk_rendering['weights'] = gather(ray_history[-1]['weights'])
-            # chunk_rendering['coord'] = gather(ray_history[-1]['coord'])
+        if return_weights:
+            chunk_rendering['weights'] = ray_history[-1]['weights']
+            chunk_rendering['coord'] = ray_history[-1]['coord']
         chunks.append(chunk_rendering)
 
     # Concatenate all chunks within each leaf of a single pytree.
