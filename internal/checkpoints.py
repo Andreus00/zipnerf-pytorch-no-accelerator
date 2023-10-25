@@ -21,7 +21,8 @@ def restore_checkpoint(
         print("Restoring checkpoint from: {}".format(path)) # TODO: use a logger
         # TODO: restore the model and the optimizer
         model.load_state_dict(torch.load(os.path.join(path, "model.pt")))
-        optimizer.load_state_dict(torch.load(os.path.join(path, "optimizer.pt")))
+        if optimizer:
+            optimizer.load_state_dict(torch.load(os.path.join(path, "optimizer.pt")))
         init_step = int(os.path.basename(path))
     return init_step, model, optimizer
 

@@ -436,7 +436,8 @@ class MLP(nn.Module):
             means = means / bound
             stds = stds / bound
         features = self.encoder(means, bound=1).unflatten(-1, (self.encoder.num_levels, -1))
-        weights = torch.erf(1 / torch.sqrt(8 * stds[..., None] ** 2 * self.encoder.grid_sizes ** 2))
+        erf_input = 1 / torch.sqrt(8 * stds[..., None] ** 2 * self.encoder.grid_sizes ** 2)
+        weights = torch.erf(erf_input)
         features = (features * weights[..., None]).mean(dim=-3).flatten(-2, -1)
         if self.scale_featurization:
             with torch.no_grad():
@@ -674,18 +675,18 @@ def render_image(model,
 
     for i_chunk, idx0 in enumerate(idx0s):
         chunk_batch = tree_map(lambda r: r[idx0:idx0 + config.render_chunk_size], batch)
-        actual_chunk_size = chunk_batch['origins'].shape[0]
+        # actual_chunk_size = chunk_batch['origins'].shape[0]
         # rays_remaining = actual_chunk_size % accelerator.num_processes
         # if rays_remaining != 0:
         #     padding = accelerator.num_processes - rays_remaining
         #     chunk_batch = tree_map(lambda v: torch.cat([v, torch.zeros_like(v[-padding:])], dim=0), chunk_batch)
         # else:
         #     padding = 0
-        padding = 0
+        # padding = 0
         # After padding the number of chunk_rays is always divisible by host_count.
-        rays_per_host = chunk_batch['origins'].shape[0] # // accelerator.num_processes  # TODO: this should not break the code. Check later.
-        start, stop =   i_chunk * rays_per_host, (i_chunk + 1) * rays_per_host  # global_rank * rays_per_host, (global_rank + 1) * rays_per_host    # TODO: Check if this is the correct way to chunk the rays.
-        chunk_batch = tree_map(lambda r: r[start:stop], chunk_batch)
+        # rays_per_host = chunk_batch['origins'].shape[0] # // accelerator.num_processes  # TODO: this should not break the code. Check later.
+        # start, stop =   i_chunk * rays_per_host, (i_chunk + 1) * rays_per_host  # global_rank * rays_per_host, (global_rank + 1) * rays_per_host    # TODO: Check if this is the correct way to chunk the rays.
+        # chunk_batch = tree_map(lambda r: r[start:stop], chunk_batch)
 
         # with accelerator.autocast():      # TODO: this may give problems if inside the model there are functions that do not cast tensors when needed.
         chunk_renderings, ray_history = model(rand,

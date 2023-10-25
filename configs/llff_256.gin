@@ -7,8 +7,8 @@ Config.adam_eps = 1e-8
 
 Model.opaque_background = True
 Model.num_levels = 2
-Model.num_prop_samples = 128
-Model.num_nerf_samples = 32
+Model.num_prop_samples = 32
+Model.num_nerf_samples = 16
 
 PropMLP.disable_density_normals = True
 PropMLP.disable_rgb = True

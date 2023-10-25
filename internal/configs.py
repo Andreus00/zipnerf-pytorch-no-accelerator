@@ -160,6 +160,9 @@ class Config:
     truncation_margin: float = 5.0
     tsdf_max_radius: float = 10.0  # in world space
 
+    # device
+    device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 
 def define_common_flags():
     # Define the flags used by both train.py and eval.py

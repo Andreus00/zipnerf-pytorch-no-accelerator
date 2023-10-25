@@ -17,7 +17,6 @@ from matplotlib import cm
 import mediapy as media
 import torch
 import numpy as np
-import accelerate
 import imageio
 from torch.utils._pytree import tree_map
 
@@ -83,7 +82,6 @@ def main(unused_argv):
     config.checkpoint_dir = os.path.join(config.exp_path, 'checkpoints')
     config.render_dir = os.path.join(config.exp_path, 'render')
 
-    accelerator = accelerate.Accelerator()
     # setup logger
     logging.basicConfig(
         format="%(asctime)s: %(message)s",
@@ -94,15 +92,12 @@ def main(unused_argv):
         level=logging.INFO,
     )
     sys.excepthook = utils.handle_exception
-    logger = accelerate.logging.get_logger(__name__)
-    logger.info(config)
-    logger.info(accelerator.state, main_process_only=False)
 
-    config.world_size = accelerator.num_processes
-    config.global_rank = accelerator.process_index
-    accelerate.utils.set_seed(config.seed, device_specific=True)
+    config.world_size = 1
+    config.global_rank = 0
     model = models.Model(config=config)
     model.eval()
+    model.to(config.device)
 
     dataset = datasets.load_dataset('test', config.data_dir, config)
     dataloader = torch.utils.data.DataLoader(np.arange(len(dataset)),
@@ -116,10 +111,9 @@ def main(unused_argv):
     else:
         postprocess_fn = lambda z: z
 
-    model = accelerator.prepare(model)
-    step = checkpoints.restore_checkpoint(config.checkpoint_dir, accelerator, logger)
+    step, model, _ = checkpoints.restore_checkpoint(config.checkpoint_dir, model, optimizer=None)
 
-    logger.info(f'Rendering checkpoint at step {step}.')
+    print(f'Rendering checkpoint at step {step}.')  # TODO: use a logger.
 
     out_name = 'path_renders' if config.render_path else 'test_preds'
     out_name = f'{out_name}_step_{step}'
@@ -137,35 +131,33 @@ def main(unused_argv):
         idx_str = idx_to_str(idx)
         curr_file = path_fn(f'color_{idx_str}.png')
         if utils.file_exists(curr_file):
-            logger.info(f'Image {idx + 1}/{dataset.size} already exists, skipping')
+            print(f'Image {idx + 1}/{dataset.size} already exists, skipping')   # TODO: use a logger
             continue
         batch = next(dataiter)
-        batch = tree_map(lambda x: x.to(accelerator.device) if x is not None else None, batch)
-        logger.info(f'Evaluating image {idx + 1}/{dataset.size}')
+        batch = tree_map(lambda x: x.to(config.device) if x is not None else None, batch)
+        print(f'Evaluating image {idx + 1}/{dataset.size}')   # TODO: use a logger
         eval_start_time = time.time()
-        rendering = models.render_image(model, accelerator,
-                                        batch, False, 1, config)
+        rendering = models.render_image(model, batch,
+                                        False, 1, config)
 
-        logger.info(f'Rendered in {(time.time() - eval_start_time):0.3f}s')
+        print(f'Rendered in {(time.time() - eval_start_time):0.3f}s')   # TODO: use a logger
 
-        if accelerator.is_main_process:  # Only record via host 0.
-            rendering['rgb'] = postprocess_fn(rendering['rgb'])
-            rendering = tree_map(lambda x: x.detach().cpu().numpy() if x is not None else None, rendering)
-            utils.save_img_u8(rendering['rgb'], path_fn(f'color_{idx_str}.png'))
-            if 'normals' in rendering:
-                utils.save_img_u8(rendering['normals'] / 2. + 0.5,
-                                  path_fn(f'normals_{idx_str}.png'))
-            utils.save_img_f32(rendering['distance_mean'],
-                               path_fn(f'distance_mean_{idx_str}.tiff'))
-            utils.save_img_f32(rendering['distance_median'],
-                               path_fn(f'distance_median_{idx_str}.tiff'))
-            utils.save_img_f32(rendering['acc'], path_fn(f'acc_{idx_str}.tiff'))
+        rendering['rgb'] = postprocess_fn(rendering['rgb'])
+        rendering = tree_map(lambda x: x.detach().cpu().numpy() if x is not None else None, rendering)
+        utils.save_img_u8(rendering['rgb'], path_fn(f'color_{idx_str}.png'))
+        if 'normals' in rendering:
+            utils.save_img_u8(rendering['normals'] / 2. + 0.5,
+                                path_fn(f'normals_{idx_str}.png'))
+        utils.save_img_f32(rendering['distance_mean'],
+                            path_fn(f'distance_mean_{idx_str}.tiff'))
+        utils.save_img_f32(rendering['distance_median'],
+                            path_fn(f'distance_median_{idx_str}.tiff'))
+        utils.save_img_f32(rendering['acc'], path_fn(f'acc_{idx_str}.tiff'))
     num_files = len(glob.glob(path_fn('acc_*.tiff')))
-    if accelerator.is_main_process and num_files == dataset.size:
-        logger.info(f'All files found, creating videos.')
+    if num_files == dataset.size:
+        print(f'All files found, creating videos.')   # TODO: use a logger
         create_videos(config, config.render_dir, out_dir, out_name, dataset.size)
-    accelerator.wait_for_everyone()
-    logger.info('Finish rendering.')
+    print('Finish rendering.')   # TODO: use a logger
 
 if __name__ == '__main__':
     with gin.config_scope('eval'):  # Use the same scope as eval.py

@@ -308,7 +308,7 @@ def main(unused_argv):
                 # test_batch = accelerate.utils.send_to_device(test_batch, accelerator.device)
                 test_batch = tree_map(lambda x: x.cuda() if x is not None else None, test_batch)
                 # render a single image with all distributed processes
-                rendering = models.render_image(model, 
+                rendering = models.render_image(model,
                                                 test_batch, False,
                                                 train_frac, config)
 
