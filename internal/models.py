@@ -1,4 +1,3 @@
-import accelerate
 import gin
 from internal import coord
 from internal import geopoly
@@ -652,7 +651,6 @@ def render_image(model,
 
   Args:
     render_fn: function, jit-ed render function mapping (rand, batch) -> pytree.
-    accelerator: used for DDP.
     batch: a `Rays` pytree, the rays to be rendered.
     rand: if random
     config: A Config class.
@@ -671,7 +669,6 @@ def render_image(model,
     chunks = []
     idx0s = tqdm(range(0, num_rays, config.render_chunk_size),
                  desc="Rendering chunk", leave=False)
-                #  disable=not (accelerator.is_main_process and verbose))   # TODO: this should not break the code. Check later.
 
     for i_chunk, idx0 in enumerate(idx0s):
         chunk_batch = tree_map(lambda r: r[idx0:idx0 + config.render_chunk_size], batch)
@@ -718,5 +715,5 @@ def render_image(model,
         ray_idx = ray_idx[:config.vis_num_rays]
         for k in keys:
             rendering[k] = [r[ray_idx] for r in rendering[k]]
-    model.train()   # TODO: check if it is needed.
+    model.train()
     return rendering

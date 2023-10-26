@@ -208,7 +208,9 @@ bash scripts/local_colmap_and_resize.sh ${DATA_DIR}
 
 ## TODO
 - [] Fix evaluate_color_projection in extract.py
-- [] Add a logger
+- [] Rewrite scripts in ./scripts so that they start files in python instead of passing through accelerate
+- [x] Add a logger
+- [x] Fix/Check/Remove all TODOs
 - [x] Convert tsdf.py
 - [x] Remove config.global_rank from the code
 - [x] Remove config.world_size from the code

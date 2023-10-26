@@ -205,7 +205,7 @@ def clean_mesh(verts, faces, v_pct=1, min_f=8, min_d=5, repair=True, remesh=True
     verts = m.vertex_matrix()
     faces = m.face_matrix()
 
-    print(f'Mesh cleaning: {_ori_vert_shape} --> {verts.shape}, {_ori_face_shape} --> {faces.shape}')  # TODO: use a logger
+    logging.info(f'Mesh cleaning: {_ori_vert_shape} --> {verts.shape}, {_ori_face_shape} --> {faces.shape}')
 
     return verts, faces
 
@@ -241,7 +241,7 @@ def decimate_mesh(verts, faces, target, backend='pymeshlab', remesh=False, optim
         verts = m.vertex_matrix()
         faces = m.face_matrix()
 
-    print(f'Mesh decimation: {_ori_vert_shape} --> {verts.shape}, {_ori_face_shape} --> {faces.shape}')  # TODO: use a logger
+    logging.info(f'Mesh decimation: {_ori_vert_shape} --> {verts.shape}, {_ori_face_shape} --> {faces.shape}')
 
     return verts, faces
 
@@ -277,7 +277,7 @@ def main(unused_argv):
     visibility_path = os.path.join(config.mesh_path, 'visibility_mask_{:.1f}.pt'.format(config.mesh_radius))
     visibility_resolution = config.visibility_resolution
     if not os.path.exists(visibility_path):
-        print('Generate visibility mask...')  # TODO: use a logger
+        logging.info('Generate visibility mask...')
         # load dataset
         dataset = datasets.load_dataset('train', config.data_dir, config)
         dataloader = torch.utils.data.DataLoader(np.arange(len(dataset)),
@@ -317,12 +317,12 @@ def main(unused_argv):
         visibility_mask = (visibility_mask.grad > 0.0001).float()
         torch.save(visibility_mask.detach().cpu(), visibility_path)
     else:
-        print('Load visibility mask from {}'.format(visibility_path))  # TODO: use a logger
+        logging.info('Load visibility mask from {}'.format(visibility_path))
         visibility_mask = torch.load(visibility_path, map_location=device)
 
     space = config.mesh_radius * 2 / (config.visibility_resolution - 1)
 
-    print("Extract mesh from visibility mask...")  # TODO: use a logger
+    logging.info("Extract mesh from visibility mask...")
     visibility_mask_np = visibility_mask[0, 0].permute(2, 1, 0).detach().cpu().numpy()
     verts, faces, normals, values = measure.marching_cubes(
         volume=-visibility_mask_np,
@@ -332,7 +332,7 @@ def main(unused_argv):
     if config.extract_visibility:
         meshexport = trimesh.Trimesh(verts, faces)
         meshexport.export(os.path.join(config.mesh_path, "visibility_mask_{}.ply".format(config.mesh_radius)), "ply")
-    print("Extract visibility mask done.")  # TODO: use a logger
+    logging.info("Extract visibility mask done.")
 
     # Initialize variables
     crop_n = 512
@@ -352,7 +352,7 @@ def main(unused_argv):
     for i in range(Nx):
         for j in range(Ny):
             for k in range(Nz):
-                print(f"Process grid cell ({i + 1}/{Nx}, {j + 1}/{Ny}, {k + 1}/{Nz})...")  # TODO: use a logger
+                logging.info(f"Process grid cell ({i + 1}/{Nx}, {j + 1}/{Ny}, {k + 1}/{Nz})...")
                 # Calculate grid cell boundaries
                 x_min, x_max = xs[i], xs[i + 1]
                 y_min, y_max = ys[j], ys[j + 1]
@@ -391,7 +391,7 @@ def main(unused_argv):
 
                 if not (np.min(z) > config.isosurface_threshold or np.max(z) < config.isosurface_threshold):
                     # Extract mesh
-                    print('Extract mesh...')  # TODO: use a logger
+                    logging.info('Extract mesh...')
                     z = z.astype(np.float32)
                     verts, faces, _, _ = measure.marching_cubes(
                         volume=-z.reshape(crop_n_x, crop_n_y, crop_n_z),
@@ -406,16 +406,16 @@ def main(unused_argv):
                     verts = verts + np.array([x_min, y_min, z_min])
 
                     meshcrop = trimesh.Trimesh(verts, faces)
-                    print('Extract vertices: {}, faces: {}'.format(meshcrop.vertices.shape[0],  # TODO: use a logger
+                    logging.info('Extract vertices: {}, faces: {}'.format(meshcrop.vertices.shape[0],
                                                                          meshcrop.faces.shape[0]))
                     meshes.append(meshcrop)
     # Save mesh
-    print('Concatenate mesh...')  # TODO: use a logger
+    logging.info('Concatenate mesh...')
     combined_mesh = trimesh.util.concatenate(meshes)
 
     # from https://github.com/ashawkey/stable-dreamfusion/blob/main/nerf/renderer.py
     # clean
-    print('Clean mesh...')  # TODO: use a logger
+    logging.info('Clean mesh...')
     vertices = combined_mesh.vertices.astype(np.float32)
     faces = combined_mesh.faces.astype(np.int32)
 
@@ -429,28 +429,28 @@ def main(unused_argv):
 
     # decimation
     if config.decimate_target > 0 and faces.shape[0] > config.decimate_target:
-        print('Decimate mesh...')  # TODO: use a logger
+        logging.info('Decimate mesh...')
         vertices, triangles = decimate_mesh(vertices, faces, config.decimate_target)
     # import ipdb; ipdb.set_trace()
     if config.vertex_color:
         # batched inference to avoid OOM
-        print('Evaluate mesh vertex color...')  # TODO: use a logger
+        logging.info('Evaluate mesh vertex color...')
         if config.vertex_projection:
             rgbs = evaluate_color_projection(model, v, f, config)
         else:
             rgbs = evaluate_color(model, v,
                                   config, std_value=config.std_value)
         rgbs = (rgbs * 255).detach().cpu().numpy().astype(np.uint8)
-        print('Export mesh (vertex color)...')  # TODO: use a logger
+        logging.info('Export mesh (vertex color)...')
         mesh = trimesh.Trimesh(vertices, faces,
                                 vertex_colors=rgbs,
                                 process=False)  # important, process=True leads to seg fault...
         mesh.export(os.path.join(config.mesh_path, 'mesh_{}.ply'.format(config.mesh_radius)))
-        print('Finish extracting mesh.')  # TODO: use a logger
+        logging.info('Finish extracting mesh.')
         return
 
     def _export(v, f, h0=2048, w0=2048, ssaa=1, name=''):
-        print('Export mesh (atlas)...')  # TODO: use a logger
+        logging.info('Export mesh (atlas)...')
         # v, f: torch Tensor
         device = v.device
         v_np = v.cpu().numpy()  # [N, 3]
@@ -462,7 +462,7 @@ def main(unused_argv):
         from sklearn.neighbors import NearestNeighbors
         from scipy.ndimage import binary_dilation, binary_erosion
 
-        print(f'Running xatlas to unwrap UVs for mesh: v={v_np.shape} f={f_np.shape}')  # TODO: use a logger
+        logging.info(f'Running xatlas to unwrap UVs for mesh: v={v_np.shape} f={f_np.shape}')
         atlas = xatlas.Atlas()
         atlas.add_mesh(v_np, f_np)
         chart_options = xatlas.ChartOptions()
@@ -545,19 +545,19 @@ def main(unused_argv):
         obj_file = os.path.join(config.mesh_path, f'{name}mesh.obj')
         mtl_file = os.path.join(config.mesh_path, f'{name}mesh.mtl')
 
-        print(f'writing obj mesh to {obj_file}')  # TODO: use a logger
+        logging.info(f'writing obj mesh to {obj_file}')
         with open(obj_file, "w") as fp:
             fp.write(f'mtllib {name}mesh.mtl \n')
 
-            print(f'writing vertices {v_np.shape}')  # TODO: use a logger
+            logging.info(f'writing vertices {v_np.shape}')
             for v in v_np:
                 fp.write(f'v {v[0]} {v[1]} {v[2]} \n')
 
-            print(f'writing vertices texture coords {vt_np.shape}')  # TODO: use a logger
+            logging.info(f'writing vertices texture coords {vt_np.shape}')
             for v in vt_np:
                 fp.write(f'vt {v[0]} {1 - v[1]} \n')
 
-            print(f'writing faces {f_np.shape}')  # TODO: use a logger
+            logging.info(f'writing faces {f_np.shape}')
             fp.write(f'usemtl mat0 \n')
             for i in range(len(f_np)):
                 fp.write(
@@ -576,7 +576,7 @@ def main(unused_argv):
     # could be extremely slow
     _export(v, f)
 
-    print('Finish extracting mesh.')  # TODO: use a logger
+    logging.info('Finish extracting mesh.')
 
 
 if __name__ == '__main__':

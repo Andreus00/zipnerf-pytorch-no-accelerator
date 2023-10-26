@@ -989,16 +989,3 @@ class MultiLLFF(Multicam, LLFF):
     pass
 
 
-if __name__ == '__main__':
-    from internal import configs
-    import accelerate
-
-    config = configs.Config()
-    accelerator = accelerate.Accelerator()
-    config.factor = 8
-    dataset = LLFF('test', '/SSD_DISK/datasets/360_v2/bicycle', config)
-    print(len(dataset))
-    for _ in tqdm(dataset):
-        pass
-    print('done')
-    # print(accelerator.process_index)

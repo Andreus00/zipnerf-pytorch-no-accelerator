@@ -60,7 +60,6 @@ class TSDF:
     @property
     def truncation(self):
         """Returns the truncation distance."""
-        # TODO: clean this up
         truncation = self.voxel_size * self.config.truncation_margin
         return truncation
 
@@ -242,7 +241,7 @@ def main(unused_argv):
     out_name = f'train_preds_step_{step}'
     out_dir = os.path.join(config.mesh_path, out_name)
     utils.makedirs(out_dir)
-    print("Render trainset in {}".format(out_dir))    # TODO: use a logger
+    logging.info("Render trainset in {}".format(out_dir))
 
     path_fn = lambda x: os.path.join(out_dir, x)
 
@@ -255,16 +254,16 @@ def main(unused_argv):
         idx_str = idx_to_str(idx)
         curr_file = path_fn(f'color_{idx_str}.png')
         if utils.file_exists(curr_file):
-            print(f'Image {idx + 1}/{dataset.size} already exists, skipping')    # TODO: use a logger
+            logging.info(f'Image {idx + 1}/{dataset.size} already exists, skipping')
             continue
         batch = next(dataiter)
         batch = tree_map(lambda x: x.to(device) if x is not None else None, batch)
-        print(f'Evaluating image {idx + 1}/{dataset.size}')    # TODO: use a logger
+        logging.info(f'Evaluating image {idx + 1}/{dataset.size}')
         eval_start_time = time.time()
         rendering = models.render_image(model, batch, 
                                         False, 1, config)
 
-        print(f'Rendered in {(time.time() - eval_start_time):0.3f}s')    # TODO: use a logger
+        logging.info(f'Rendered in {(time.time() - eval_start_time):0.3f}s')
 
         rendering['rgb'] = postprocess_fn(rendering['rgb'])
         rendering = tree_map(lambda x: x.detach().cpu().numpy() if x is not None else None, rendering)
@@ -283,7 +282,7 @@ def main(unused_argv):
     c2w[:, 3, 3] = 1
     K = torch.from_numpy(dataset.pixtocams).float().to(device).inverse()
 
-    print('Reading images')    # TODO: use a logger
+    logging.info('Reading images')
     rgb_files = sorted(glob.glob(path_fn('color_*.png')))
     depth_files = sorted(glob.glob(path_fn('distance_median_*.tiff')))
     assert len(rgb_files) == len(depth_files)
@@ -297,7 +296,7 @@ def main(unused_argv):
     depth_images = torch.tensor(np.array(depth_images), device=device).permute(0, 3, 1, 2)  # shape (N, 1, H, W)
 
     batch_size = 1
-    print("Integrating the TSDF")    # TODO: use a logger
+    logging.info("Integrating the TSDF")
     for i in tqdm(range(0, len(c2w), batch_size)):
         tsdf.integrate_tsdf(
             c2w[i: i + batch_size],
@@ -306,9 +305,9 @@ def main(unused_argv):
             color_images=color_images[i: i + batch_size],
         )
 
-    print("Saving TSDF Mesh")    # TODO: use a logger
+    logging.info("Saving TSDF Mesh")
     tsdf.export_mesh(os.path.join(config.mesh_path, "tsdf_mesh.ply"))
-    print('Finish extracting mesh using TSDF.')    # TODO: use a logger
+    logging.info('Finish extracting mesh using TSDF.')
 
 
 if __name__ == '__main__':

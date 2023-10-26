@@ -1,9 +1,10 @@
 import os
 import shutil
 
-import accelerate
 import torch
 import glob
+
+import logging
 
 
 def restore_checkpoint(
@@ -15,11 +16,10 @@ def restore_checkpoint(
     dirs.sort()
     path = dirs[-1] if len(dirs) > 0 else None
     if path is None:
-        print("Checkpoint does not exist. Starting a new training run.")    # TODO: use a logger
+        logging.info("Checkpoint does not exist. Starting a new training run.")
         init_step = 0
     else:
-        print("Restoring checkpoint from: {}".format(path)) # TODO: use a logger
-        # TODO: restore the model and the optimizer
+        logging.info("Restoring checkpoint from: {}".format(path))
         model.load_state_dict(torch.load(os.path.join(path, "model.pt")))
         if optimizer:
             optimizer.load_state_dict(torch.load(os.path.join(path, "optimizer.pt")))
@@ -41,4 +41,4 @@ def save_checkpoint(save_dir,
     os.makedirs(save_path, exist_ok=True)
     torch.save(model.state_dict(), os.path.join(save_path, "model.pt"))
     torch.save(optimizer.state_dict(), os.path.join(save_path, "optimizer.pt"))
-    print("Checkpoint saved at: {}".format(save_path)) # TODO: use a logger
+    logging.info("Checkpoint saved at: {}".format(save_path))

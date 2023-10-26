@@ -231,10 +231,10 @@ def predicted_normal_loss(model, ray_history, config):
 
 def clip_gradients(model, config):
     """Clips gradients of MLP based on norm and max value."""
-    if config.grad_max_norm > 0: # and accelerator.sync_gradients:   # TODO: this should not break the code. Check
+    if config.grad_max_norm > 0:
         torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_max_norm)
 
-    if config.grad_max_val > 0: # and accelerator.sync_gradients:   # TODO: this should not break the code. Check
+    if config.grad_max_val > 0:
         torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_max_val)
 
     for param in model.parameters():

@@ -44,16 +44,16 @@ def create_videos(config, base_dir, out_dir, out_name, num_frames):
     # lo, hi = [config.render_dist_curve_fn(x) for x in distance_limits]
     depth_curve_fn = lambda x: -np.log(x + np.finfo(np.float32).eps)
     lo, hi = distance_limits
-    print(f'Video shape is {shape[:2]}')
+    logging.info(f'Video shape is {shape[:2]}')
 
     for k in ['color', 'normals', 'acc', 'distance_mean', 'distance_median']:
         video_file = os.path.join(base_dir, f'{video_prefix}_{k}.mp4')
         file_ext = 'png' if k in ['color', 'normals'] else 'tiff'
         file0 = os.path.join(out_dir, f'{k}_{idx_to_str(0)}.{file_ext}')
         if not utils.file_exists(file0):
-            print(f'Images missing for tag {k}')
+            logging.info(f'Images missing for tag {k}')
             continue
-        print(f'Making video {video_file}...')
+        logging.info(f'Making video {video_file}...')
 
         writer = imageio.get_writer(video_file, fps=config.render_video_fps)
         for idx in range(num_frames):
@@ -111,7 +111,7 @@ def main(unused_argv):
 
     step, model, _ = checkpoints.restore_checkpoint(config.checkpoint_dir, model, optimizer=None)
 
-    print(f'Rendering checkpoint at step {step}.')  # TODO: use a logger.
+    logging.info(f'Rendering checkpoint at step {step}.')
 
     out_name = 'path_renders' if config.render_path else 'test_preds'
     out_name = f'{out_name}_step_{step}'
@@ -129,16 +129,16 @@ def main(unused_argv):
         idx_str = idx_to_str(idx)
         curr_file = path_fn(f'color_{idx_str}.png')
         if utils.file_exists(curr_file):
-            print(f'Image {idx + 1}/{dataset.size} already exists, skipping')   # TODO: use a logger
+            logging.info(f'Image {idx + 1}/{dataset.size} already exists, skipping')
             continue
         batch = next(dataiter)
         batch = tree_map(lambda x: x.to(config.device) if x is not None else None, batch)
-        print(f'Evaluating image {idx + 1}/{dataset.size}')   # TODO: use a logger
+        logging.info(f'Evaluating image {idx + 1}/{dataset.size}')
         eval_start_time = time.time()
         rendering = models.render_image(model, batch,
                                         False, 1, config)
 
-        print(f'Rendered in {(time.time() - eval_start_time):0.3f}s')   # TODO: use a logger
+        logging.info(f'Rendered in {(time.time() - eval_start_time):0.3f}s')
 
         rendering['rgb'] = postprocess_fn(rendering['rgb'])
         rendering = tree_map(lambda x: x.detach().cpu().numpy() if x is not None else None, rendering)
@@ -153,9 +153,9 @@ def main(unused_argv):
         utils.save_img_f32(rendering['acc'], path_fn(f'acc_{idx_str}.tiff'))
     num_files = len(glob.glob(path_fn('acc_*.tiff')))
     if num_files == dataset.size:
-        print(f'All files found, creating videos.')   # TODO: use a logger
+        logging.info(f'All files found, creating videos.')
         create_videos(config, config.render_dir, out_dir, out_name, dataset.size)
-    print('Finish rendering.')   # TODO: use a logger
+    logging.info('Finish rendering.')
 
 if __name__ == '__main__':
     with gin.config_scope('eval'):  # Use the same scope as eval.py
