@@ -16,7 +16,6 @@ from internal import coord
 from internal import checkpoints
 from internal import configs
 import torch
-import accelerate
 from tqdm import tqdm
 from torch.utils._pytree import tree_map
 import torch.nn.functional as F
@@ -29,18 +28,15 @@ configs.define_common_flags()
 
 
 class TSDF:
-    def __init__(self, config: configs.Config, accelerator: accelerate.Accelerator):
+    def __init__(self, config: configs.Config):
         self.config = config
-        self.device = accelerator.device
-        self.accelerator = accelerator
+        self.device = config.device
         self.origin = torch.tensor([-config.tsdf_radius] * 3, dtype=torch.float32, device=self.device)
         self.voxel_size = 2 * config.tsdf_radius / (config.tsdf_resolution - 1)
         self.resolution = config.tsdf_resolution
         # create the voxel coordinates
         dim = torch.arange(self.resolution)
         grid = torch.stack(torch.meshgrid(dim, dim, dim, indexing="ij"), dim=0).reshape(3, -1)
-        period = int(grid.shape[1] / accelerator.num_processes + 0.5)
-        grid = grid[:, period * accelerator.process_index: period * (accelerator.process_index + 1)]
         self.voxel_coords = self.origin.view(3, 1) + grid.to(self.device) * self.voxel_size
 
         N = self.voxel_coords.shape[1]
@@ -75,43 +71,26 @@ class TSDF:
         mask = self.voxel_world_coords[:, :3].permute(0, 2, 1).norm(p=2, dim=-1) > self.config.tsdf_max_radius
         tsdf_values[mask.reshape(self.values.shape)] = 1.
 
-        tsdf_values_np = self.accelerator.gather(tsdf_values).cpu().reshape((self.resolution, self.resolution, self.resolution)).numpy()
-        color_values_np = self.accelerator.gather(self.colors).cpu().reshape((self.resolution, self.resolution, self.resolution, 3)).numpy()
+        tsdf_values_np = tsdf_values.cpu().reshape((self.resolution, self.resolution, self.resolution)).numpy()
+        color_values_np = self.colors.cpu().reshape((self.resolution, self.resolution, self.resolution, 3)).numpy()
 
-        # # for OOM(resolution > 512)
-        # tsdf_values_np = tsdf_values.cpu().numpy()
-        # color_values_np = self.colors.cpu().numpy()
-        # path_dir = os.path.dirname(path)
-        # np.save(os.path.join(path_dir, 'tsdf_values_tmp_{}.npy'.format(self.accelerator.process_index)), tsdf_values_np)
-        # np.save(os.path.join(path_dir, 'color_values_tmp_{}.npy'.format(self.accelerator.process_index)), color_values_np)
-        # self.accelerator.wait_for_everyone()
+        vertices, faces, normals, _ = measure.marching_cubes(
+            tsdf_values_np,
+            level=0,
+            allow_degenerate=False,
+        )
 
-        if self.accelerator.is_main_process:
-            # print('Start marching cubes')
-            # tsdf_values_np = np.concatenate([np.load(os.path.join(path_dir, 'tsdf_values_tmp_{}.npy'.format(i)), allow_pickle=True) for i in
-            #                                  range(self.accelerator.num_processes)]).reshape((self.resolution, self.resolution, self.resolution))
-            # color_values_np = np.concatenate([np.load(os.path.join(path_dir, 'color_values_tmp_{}.npy'.format(i)), allow_pickle=True) for i in
-            #                                   range(self.accelerator.num_processes)]).reshape((self.resolution, self.resolution, self.resolution, 3))
-            # print('After concatenate')
-            # os.system('rm {}'.format(os.path.join(path_dir, 'tsdf_values_tmp_*.npy')))
-            # os.system('rm {}'.format(os.path.join(path_dir, 'color_values_tmp_*.npy')))
-            vertices, faces, normals, _ = measure.marching_cubes(
-                tsdf_values_np,
-                level=0,
-                allow_degenerate=False,
-            )
+        vertices_indices = np.round(vertices).astype(int)
+        colors = color_values_np[vertices_indices[:, 0], vertices_indices[:, 1], vertices_indices[:, 2]]
 
-            vertices_indices = np.round(vertices).astype(int)
-            colors = color_values_np[vertices_indices[:, 0], vertices_indices[:, 1], vertices_indices[:, 2]]
-
-            # move vertices back to world space
-            vertices = self.origin.cpu().numpy() + vertices * self.voxel_size
-            vertices = coord.inv_contract_np(vertices)
-            trimesh.Trimesh(vertices=vertices,
-                            faces=faces,
-                            normals=normals,
-                            vertex_colors=colors,
-                            ).export(path)
+        # move vertices back to world space
+        vertices = self.origin.cpu().numpy() + vertices * self.voxel_size
+        vertices = coord.inv_contract_np(vertices)
+        trimesh.Trimesh(vertices=vertices,
+                        faces=faces,
+                        normals=normals,
+                        vertex_colors=colors,
+                        ).export(path)
 
     @torch.no_grad()
     def integrate_tsdf(
@@ -229,9 +208,7 @@ def main(unused_argv):
     config.checkpoint_dir = os.path.join(config.exp_path, 'checkpoints')
     os.makedirs(config.mesh_path, exist_ok=True)
 
-    # accelerator for DDP
-    accelerator = accelerate.Accelerator()
-    device = accelerator.device
+    device = config.device
 
     # setup logger
     logging.basicConfig(
@@ -243,18 +220,12 @@ def main(unused_argv):
         level=logging.INFO,
     )
     sys.excepthook = utils.handle_exception
-    logger = accelerate.logging.get_logger(__name__)
-    logger.info(config)
-    logger.info(accelerator.state, main_process_only=False)
-
-    accelerate.utils.set_seed(config.seed, device_specific=True)
 
     # setup model and optimizer
     model = models.Model(config=config)
-    model = accelerator.prepare(model)
-    step = checkpoints.restore_checkpoint(config.checkpoint_dir, accelerator, logger)
+    step, model, _ = checkpoints.restore_checkpoint(config.checkpoint_dir, model, optimizer=None)
     model.eval()
-    module = accelerator.unwrap_model(model)
+    model.to(device)
 
     dataset = datasets.load_dataset('train', config.data_dir, config)
     dataloader = torch.utils.data.DataLoader(np.arange(len(dataset)),
@@ -271,7 +242,7 @@ def main(unused_argv):
     out_name = f'train_preds_step_{step}'
     out_dir = os.path.join(config.mesh_path, out_name)
     utils.makedirs(out_dir)
-    logger.info("Render trainset in {}".format(out_dir))
+    print("Render trainset in {}".format(out_dir))    # TODO: use a logger
 
     path_fn = lambda x: os.path.join(out_dir, x)
 
@@ -284,28 +255,26 @@ def main(unused_argv):
         idx_str = idx_to_str(idx)
         curr_file = path_fn(f'color_{idx_str}.png')
         if utils.file_exists(curr_file):
-            logger.info(f'Image {idx + 1}/{dataset.size} already exists, skipping')
+            print(f'Image {idx + 1}/{dataset.size} already exists, skipping')    # TODO: use a logger
             continue
         batch = next(dataiter)
-        batch = tree_map(lambda x: x.to(accelerator.device) if x is not None else None, batch)
-        logger.info(f'Evaluating image {idx + 1}/{dataset.size}')
+        batch = tree_map(lambda x: x.to(device) if x is not None else None, batch)
+        print(f'Evaluating image {idx + 1}/{dataset.size}')    # TODO: use a logger
         eval_start_time = time.time()
-        rendering = models.render_image(model, accelerator,
-                                        batch, False, 1, config)
+        rendering = models.render_image(model, batch, 
+                                        False, 1, config)
 
-        logger.info(f'Rendered in {(time.time() - eval_start_time):0.3f}s')
+        print(f'Rendered in {(time.time() - eval_start_time):0.3f}s')    # TODO: use a logger
 
-        if accelerator.is_main_process:  # Only record via host 0.
-            rendering['rgb'] = postprocess_fn(rendering['rgb'])
-            rendering = tree_map(lambda x: x.detach().cpu().numpy() if x is not None else None, rendering)
-            utils.save_img_u8(rendering['rgb'], path_fn(f'color_{idx_str}.png'))
-            utils.save_img_f32(rendering['distance_mean'],
-                               path_fn(f'distance_mean_{idx_str}.tiff'))
-            utils.save_img_f32(rendering['distance_median'],
-                               path_fn(f'distance_median_{idx_str}.tiff'))
+        rendering['rgb'] = postprocess_fn(rendering['rgb'])
+        rendering = tree_map(lambda x: x.detach().cpu().numpy() if x is not None else None, rendering)
+        utils.save_img_u8(rendering['rgb'], path_fn(f'color_{idx_str}.png'))
+        utils.save_img_f32(rendering['distance_mean'],
+                            path_fn(f'distance_mean_{idx_str}.tiff'))
+        utils.save_img_f32(rendering['distance_median'],
+                            path_fn(f'distance_median_{idx_str}.tiff'))
 
-    # if accelerator.is_main_process:
-    tsdf = TSDF(config, accelerator)
+    tsdf = TSDF(config)
 
     c2w = torch.from_numpy(dataset.camtoworlds[:, :3, :4]).float().to(device)
 
@@ -314,13 +283,13 @@ def main(unused_argv):
     c2w[:, 3, 3] = 1
     K = torch.from_numpy(dataset.pixtocams).float().to(device).inverse()
 
-    logger.info('Reading images')
+    print('Reading images')    # TODO: use a logger
     rgb_files = sorted(glob.glob(path_fn('color_*.png')))
     depth_files = sorted(glob.glob(path_fn('distance_median_*.tiff')))
     assert len(rgb_files) == len(depth_files)
     color_images = []
     depth_images = []
-    for rgb_file, depth_file in zip(tqdm(rgb_files, disable=not accelerator.is_main_process), depth_files):
+    for rgb_file, depth_file in zip(tqdm(rgb_files), depth_files):
         color_images.append(utils.load_img(rgb_file) / 255)
         depth_images.append(utils.load_img(depth_file)[..., None])
 
@@ -328,8 +297,8 @@ def main(unused_argv):
     depth_images = torch.tensor(np.array(depth_images), device=device).permute(0, 3, 1, 2)  # shape (N, 1, H, W)
 
     batch_size = 1
-    logger.info("Integrating the TSDF")
-    for i in tqdm(range(0, len(c2w), batch_size), disable=not accelerator.is_main_process):
+    print("Integrating the TSDF")    # TODO: use a logger
+    for i in tqdm(range(0, len(c2w), batch_size)):
         tsdf.integrate_tsdf(
             c2w[i: i + batch_size],
             K,
@@ -337,10 +306,9 @@ def main(unused_argv):
             color_images=color_images[i: i + batch_size],
         )
 
-    logger.info("Saving TSDF Mesh")
+    print("Saving TSDF Mesh")    # TODO: use a logger
     tsdf.export_mesh(os.path.join(config.mesh_path, "tsdf_mesh.ply"))
-    accelerator.wait_for_everyone()
-    logger.info('Finish extracting mesh using TSDF.')
+    print('Finish extracting mesh using TSDF.')    # TODO: use a logger
 
 
 if __name__ == '__main__':
