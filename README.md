@@ -1,5 +1,11 @@
 # ZipNeRF
-# STILL WORKNG ON IT
+## Notes on this fork:
+I created this fork to remove Accelerate as I had to integrate zipnerf in a system that is not written with Accelerate.
+I hope that someone will find this repo useful as well.
+I didn't check whether this implementation returns the same exact results as the original one, but I don't see why it should not since it
+is the same code.
+
+# ZipNeRF-pytorch's results and info
 An unofficial pytorch implementation of 
 "Zip-NeRF: Anti-Aliased Grid-Based Neural Radiance Fields" 
 [https://arxiv.org/abs/2304.06706](https://arxiv.org/abs/2304.06706).
@@ -69,6 +75,8 @@ conda activate zipnerf
 pip install -r requirements.txt
 
 # Install other extensions
+## IMPORTANT: if yoi are on Linuz and gridencoder is saying that you are not using c++17, 
+## try going in ./gridencoder/setup.py and changing line 13 to `c_flags = ['-O3', '-std=c++17']`.
 pip install ./gridencoder
 
 # Install nvdiffrast (optional, for textured mesh)
@@ -101,9 +109,6 @@ unzip 360_v2.zip
 
 ## Train
 ```
-# Configure your training (DDP? fp16? ...)
-# see https://huggingface.co/docs/accelerate/index for details
-accelerate config
 
 # Where your data is 
 DATA_DIR=data/360_v2/bicycle
@@ -112,7 +117,7 @@ EXP_NAME=360_v2/bicycle
 # Experiment will be conducted under "exp/${EXP_NAME}" folder
 # "--gin_configs=configs/360.gin" can be seen as a default config 
 # and you can add specific config useing --gin_bindings="..." 
-accelerate launch train.py \
+python3 train.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXP_NAME}'" \
@@ -139,7 +144,7 @@ tensorboard --logdir "exp/${EXP_NAME}"
 ### Render
 Rendering results can be found in the directory `exp/${EXP_NAME}/render`
 ```
-accelerate launch render.py \
+python3 render.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXP_NAME}'" \
@@ -155,7 +160,7 @@ bash scripts/render_360.sh
 Evaluating results can be found in the directory `exp/${EXP_NAME}/test_preds`
 ```
 # using the same exp_name as in training
-accelerate launch eval.py \
+python3 eval.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXP_NAME}'" \
@@ -170,7 +175,7 @@ bash scripts/eval_360.sh
 Mesh results can be found in the directory `exp/${EXP_NAME}/mesh`
 ```
 # more configuration can be found in internal/configs.py
-accelerate launch extract.py \
+python3 extract.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXP_NAME}'" \
@@ -182,7 +187,7 @@ accelerate launch extract.py \
 #    --gin_bindings="Config.vertex_projection = True"  # (optional) use projection for vertex color
 
 # or extracting mesh using tsdf method
-accelerate launch tsdf.py \
+python3 tsdf.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXP_NAME}'" \
@@ -208,7 +213,7 @@ bash scripts/local_colmap_and_resize.sh ${DATA_DIR}
 
 ## TODO
 - [] Fix evaluate_color_projection in extract.py
-- [] Rewrite scripts in ./scripts so that they start files in python instead of passing through accelerate
+- [x] Rewrite scripts in ./scripts so that they start files in python instead of passing through accelerate
 - [x] Add a logger
 - [x] Fix/Check/Remove all TODOs
 - [x] Convert tsdf.py
@@ -249,8 +254,7 @@ bash scripts/local_colmap_and_resize.sh ${DATA_DIR}
 ```
 
 ## Acknowledgements
-This work is based on my another repo https://github.com/SuLvXiangXin/multinerf-pytorch, 
-which is basically a pytorch translation from [multinerf](https://github.com/google-research/multinerf)
+This work is based on SuLvXiangXin's repo https://github.com/SuLvXiangXin/zipnerf-pytorch.git
 
 - Thanks to [multinerf](https://github.com/google-research/multinerf) for amazing multinerf(MipNeRF360,RefNeRF,RawNeRF) implementation
 - Thanks to [accelerate](https://github.com/huggingface/accelerate) for distributed training

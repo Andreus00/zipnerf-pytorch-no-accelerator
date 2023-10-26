@@ -10,7 +10,7 @@ do
   EXPERIMENT=$EXPERIMENT_PREFIX/"${SCENE[i]}"
   DATA_DIR="$DATA_ROOT"/"${SCENE[i]}"
 
-  accelerate launch eval.py \
+  python3 eval.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \
@@ -24,7 +24,7 @@ do
   EXPERIMENT=$EXPERIMENT_PREFIX/"${SCENE[i]}"
   DATA_DIR="$DATA_ROOT"/"${SCENE[i]}"
 
-  accelerate launch eval.py \
+  python3 eval.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \

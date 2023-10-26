@@ -11,19 +11,19 @@ do
   EXPERIMENT=$EXPERIMENT_PREFIX/"${SCENE[i]}"
   DATA_DIR="$DATA_ROOT"/"${SCENE[i]}"
 
-  accelerate launch train.py \
+  python3 train.py \
     --gin_configs=configs/multi360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \
       --gin_bindings="Config.factor = 4"
 
-  accelerate launch eval.py \
+  python3 eval.py \
   --gin_configs=configs/multi360.gin \
   --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
   --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \
   --gin_bindings="Config.factor = 4"
 
-  accelerate launch render.py \
+  python3 render.py \
   --gin_configs=configs/360.gin \
   --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
   --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \
@@ -41,19 +41,19 @@ do
   EXPERIMENT=$EXPERIMENT_PREFIX/"${SCENE[i]}"
   DATA_DIR="$DATA_ROOT"/"${SCENE[i]}"
 
-  accelerate launch train.py \
+  python3 train.py \
     --gin_configs=configs/multi360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \
       --gin_bindings="Config.factor = 2"
 
-  accelerate launch eval.py \
+  python3 eval.py \
   --gin_configs=configs/multi360.gin \
   --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
   --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \
   --gin_bindings="Config.factor = 2"
 
-  accelerate launch render.py \
+  python3 render.py \
   --gin_configs=configs/360.gin \
   --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
   --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \

@@ -10,17 +10,17 @@ do
   EXPERIMENT=$EXPERIMENT_PREFIX/"${SCENE[i]}"
   DATA_DIR="$DATA_ROOT"/"${SCENE[i]}"
 
-  accelerate launch train.py \
+  python3 train.py \
     --gin_configs=configs/blender.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXPERIMENT}'"
 
-  accelerate launch eval.py \
+  python3 eval.py \
   --gin_configs=configs/blender.gin \
   --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
   --gin_bindings="Config.exp_name = '${EXPERIMENT}'"
 
-  accelerate launch extract.py \
+  python3 extract.py \
   --gin_configs=configs/blender.gin \
   --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
   --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \

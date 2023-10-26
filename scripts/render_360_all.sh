@@ -9,7 +9,7 @@ for(( i=0; i<$len; i++ ))
 do
   EXPERIMENT=$EXPERIMENT_PREFIX/"${SCENE[i]}"
   DATA_DIR="$DATA_ROOT"/"${SCENE[i]}"
-  accelerate launch render.py \
+  python3 render.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \
@@ -26,7 +26,7 @@ for(( i=0; i<$len; i++ ))
 do
   EXPERIMENT=$EXPERIMENT_PREFIX/"${SCENE[i]}"
   DATA_DIR="$DATA_ROOT"/"${SCENE[i]}"
-  accelerate launch render.py \
+  python3 render.py \
     --gin_configs=configs/360.gin \
     --gin_bindings="Config.data_dir = '${DATA_DIR}'" \
     --gin_bindings="Config.exp_name = '${EXPERIMENT}'" \
