@@ -247,8 +247,6 @@ def main(unused_argv):
     logger.info(config)
     logger.info(accelerator.state, main_process_only=False)
 
-    config.world_size = accelerator.num_processes
-    config.global_rank = accelerator.process_index
     accelerate.utils.set_seed(config.seed, device_specific=True)
 
     # setup model and optimizer

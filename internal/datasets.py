@@ -235,7 +235,7 @@ class Dataset(torch.utils.data.Dataset):
 
         # Initialize attributes
         self._patch_size = max(config.patch_size, 1)
-        self._batch_size = config.batch_size // config.world_size
+        self._batch_size = config.batch_size
         if self._patch_size ** 2 > self._batch_size:
             raise ValueError(f'Patch size {self._patch_size}^2 too large for ' +
                              f'per-process batch size {self._batch_size}')
@@ -248,8 +248,6 @@ class Dataset(torch.utils.data.Dataset):
         self._render_spherical = False
 
         self.config = config
-        self.global_rank = config.global_rank
-        self.world_size = config.world_size
         self.split = utils.DataSplit(split)
         self.data_dir = data_dir
         self.near = config.near
@@ -619,12 +617,6 @@ class LLFF(Dataset):
         indices = split_indices[self.split]
         image_names = [image_names[i] for i in indices]
         poses = poses[indices]
-        # if self.split == utils.DataSplit.TRAIN:
-        #     # load different training data on different rank
-        #     local_indices = [i for i in range(len(image_names)) if (i + self.global_rank) % self.world_size == 0]
-        #     image_names = [image_names[i] for i in local_indices]
-        #     poses = poses[local_indices]
-        #     indices = local_indices
 
         raw_testscene = False
         if config.rawnerf_mode:
@@ -938,10 +930,7 @@ class Multicam(Dataset):
             self._next_fn = self._next_test
 
     def _generate_rays(self):
-        if self.global_rank == 0:
-            tbar = tqdm(range(len(self.camtoworlds)), desc='Generating rays', leave=False)
-        else:
-            tbar = range(len(self.camtoworlds))
+        tbar = tqdm(range(len(self.camtoworlds)), desc='Generating rays', leave=False)
 
         self.batches = defaultdict(list)
         for cam_idx in tbar:
@@ -1006,8 +995,6 @@ if __name__ == '__main__':
 
     config = configs.Config()
     accelerator = accelerate.Accelerator()
-    config.world_size = accelerator.num_processes
-    config.global_rank = accelerator.process_index
     config.factor = 8
     dataset = LLFF('test', '/SSD_DISK/datasets/360_v2/bicycle', config)
     print(len(dataset))

@@ -268,9 +268,6 @@ def main(unused_argv):
     )
     sys.excepthook = utils.handle_exception
 
-    config.world_size = 1
-    config.global_rank = 0
-
     # setup model and optimizer
     model = models.Model(config=config)
     model = model.to(device)

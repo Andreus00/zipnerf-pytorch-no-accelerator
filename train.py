@@ -35,8 +35,7 @@ def main(unused_argv):
     config = configs.load_config()
     config.exp_path = os.path.join("exp", config.exp_name)
     config.checkpoint_dir = os.path.join(config.exp_path, 'checkpoints')
-    config.world_size = 1   #  = accelerator.num_processes
-    config.global_rank = 0  # = accelerator.process_index
+    
     utils.makedirs(config.exp_path)
     with utils.open_file(os.path.join(config.exp_path, 'config.gin'), 'w') as f:
         f.write(gin.config_str())
